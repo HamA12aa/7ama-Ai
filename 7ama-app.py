@@ -1,65 +1,78 @@
 import streamlit as st
 import google.generativeai as genai
-import time
 
 # رێکخستنی لاپەڕە
-st.set_page_config(page_title="SRT Translator (Gemini Flash)", layout="centered")
+st.set_page_config(page_title="SRT Translator", page_icon="📝")
 
-st.title("وەرگێڕی فایلە ژێرنووسەکان (SRT)")
-st.write("بە بەکارهێنانی Google Gemini 1.5 Flash")
+st.title("وەرگێڕی دەقی SRT")
+st.write("دەقەکانت لێرە دابنێ یان فایلەکە باربکە بۆ وەرگێڕان بە Gemini 1.5 Flash")
 
-# وەرگرتنی API Key لە بەکارهێنەر
+# ڕێکخستنی Sidebar بۆ API Key و زمان
+st.sidebar.header("رێکخستنەکان")
 api_key = st.sidebar.text_input("Google API Key لێرە دابنێ:", type="password")
-target_language = st.selectbox("وەرگێڕان بۆ زمانی:", ["Kurdish", "Arabic", "English", "Persian"])
+target_language = st.sidebar.selectbox("وەرگێڕان بۆ زمانی:", ["Kurdish", "Arabic", "English", "Persian"])
 
-if api_key:
+# فەرمانی وەرگێڕان
+def translate_srt(text, target_lang):
+    if not api_key:
+        st.error("تکایە API Key دابنێ لە لای چەپ!")
+        return None
+    
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-1.5-flash')
-else:
-    st.warning("تکایە سەرەتا API Key فۆرمات بکە لە لای چەپەوە.")
-
-# فەرمانی وەرگێڕان بە Gemini
-def translate_text(text, target_lang):
-    prompt = f"""
-    You are a professional subtitle translator. 
-    Translate the following SRT subtitle content into {target_lang}.
-    Rules:
-    1. Keep the SRT index numbers and timestamps exactly as they are.
-    2. Only translate the text content.
-    3. Maintain the formatting.
     
+    prompt = f"""
+    You are an expert subtitle translator. 
+    Translate the following SRT content into {target_lang}.
+    Rules:
+    1. Keep the SRT index numbers and timestamps EXACTLY as they are.
+    2. Only translate the spoken text.
+    3. Maintain the SRT format structure.
+    4. Provide only the translated SRT text as output.
+
     Content:
     {text}
     """
+    
     try:
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
-        return f"Error: {e}"
+        st.error(f"هەڵەیەک ڕوویدا: {str(e)}")
+        return None
 
-# بارکردنی فایل
-uploaded_file = st.file_uploader("فایلی SRT باربکە", type=["srt"])
+# دروستکردنی دوو تابی جیاواز (یەک بۆ کۆپی-پەیست، یەک بۆ فایل)
+tab1, tab2 = st.tabs(["کۆپی و پەیست (Paste Text)", "بارکردنی فایل (Upload File)"])
 
-if uploaded_file is not None and api_key:
-    # خوێندنەوەی ناوەڕۆکی فایلەکە
-    content = uploaded_file.read().decode("utf-8")
-    
-    if st.button("دەستپێکردنی وەرگێڕان"):
-        with st.spinner('خەریکی وەرگێڕانە... کەمێک چاوەڕێ بە'):
-            # تێبینی: بۆ فایلە زۆر گەورەکان باشترە فایلەکە پارچە پارچە بکرێت، 
-            # بەڵام Gemini Flash توانای وەرگرتنی دەقی زۆری هەیە.
-            translated_content = translate_text(content, target_language)
+srt_content = ""
+
+with tab1:
+    input_text = st.text_area("دەقی فایلی SRT لێرە دابنێ (Paste):", height=300)
+    if input_text:
+        srt_content = input_text
+
+with tab2:
+    uploaded_file = st.file_uploader("فایلی SRT هەڵبژێرە", type=["srt"])
+    if uploaded_file is not None:
+        srt_content = uploaded_file.read().decode("utf-8")
+        st.success("فایلەکە بەسەرکەوتوویی خوێنرایەوە!")
+
+# دوگمەی دەستپێکردنی وەرگێڕان
+if st.button("دەستپێکردنی وەرگێڕان ✨"):
+    if srt_content:
+        with st.spinner('خەریکی وەرگێڕانە... تکایە چاوەڕێ بە'):
+            translated_result = translate_srt(srt_content, target_language)
             
-            if translated_content:
-                st.success("وەرگێڕان بەسەرکەوتوویی تەواو بوو!")
+            if translated_result:
+                st.subheader("ئەنجامی وەرگێڕان:")
+                st.text_area("دەقی وەرگێڕدراو:", translated_result, height=300)
                 
-                # پیشاندانی بەشێکی کەم لە وەرگێڕانەکە
-                st.text_area("نموونەیەک لە وەرگێڕانەکە:", translated_content[:500], height=200)
-                
-                # دوگمەی دابەزاندن (Download)
+                # دوگمەی دابەزاندن
                 st.download_button(
-                    label="داگرتنی فایلی وەرگێڕدراو",
-                    data=translated_content,
+                    label="داگرتنی فایلی وەرگێڕدراو (.srt)",
+                    data=translated_result,
                     file_name=f"translated_{target_language}.srt",
                     mime="text/plain"
                 )
+    else:
+        st.warning("تکایە سەرەتا دەقێک دابنێ یان فایلێک باربکە.")
